@@ -1,0 +1,19 @@
+{
+  "name": "Habit & Goal Tracker Cloud",
+  "short_name": "Hábitos",
+  "description": "Painel interativo de hábitos e metas diárias integrado ao Google Sheets.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%230f172a'/><rect x='24' y='24' width='464' height='464' rx='92' fill='none' stroke='%236366f1' stroke-width='16' stroke-opacity='0.3'/><path d='M136 272l80 80 160-176' fill='none' stroke='%2334d399' stroke-width='44' stroke-linecap='round' stroke-linejoin='round'/><circle cx='384' cy='128' r='28' fill='%236366f1'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

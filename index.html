@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Painel de Hábitos & Metas (PWA)</title>
+
+    <!-- Configurações Nativas de PWA (Android & iOS) -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#020617">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hábitos">
+    <link id="appleTouchIcon" rel="apple-touch-icon" href="">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .check-anim { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .check-anim:active { transform: scale(0.85); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-3 sm:p-6 md:p-8 select-none">
+
+    <div class="max-w-7xl mx-auto space-y-5">
+        
+        <!-- CABEÇALHO -->
+        <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-lg">
+            <div>
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <div class="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400">
+                        <i data-lucide="activity" class="w-6 h-6"></i>
+                    </div>
+                    <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white">Habit & Goal Tracker</h1>
+                    <!-- Badge de Status da Nuvem -->
+                    <span id="syncStatusBadge" class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-slate-500"></span> Local
+                    </span>
+                </div>
+                <p id="currentDateDisplay" class="text-slate-400 text-xs sm:text-sm mt-1">Carregando data...</p>
+            </div>
+            
+            <!-- Controles de Sincronização e Botão Instalar App -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Botão Instalar PWA (aparece automaticamente quando suportado) -->
+                <button id="installPwaBtn" onclick="installPWA()" class="hidden items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-600/20 transition">
+                    <i data-lucide="smartphone" class="w-4 h-4"></i> Instalar App
+                </button>
+
+                <div class="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 flex-1 sm:flex-initial">
+                    <input 
+                        type="url" 
+                        id="apiUrlInput" 
+                        placeholder="URL do Google Apps Script (/exec)..." 
+                        class="bg-transparent text-xs text-slate-200 px-2.5 py-1.5 w-full sm:w-64 focus:outline-none"
+                    >
+                    <button onclick="saveApiUrl()" class="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shrink-0">
+                        Conectar
+                    </button>
+                </div>
+
+                <button onclick="pullFromCloud()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition" title="Sincronizar agora">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Sincronizar</span>
+                </button>
+
+                <button onclick="exportData()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition" title="Exportar Backup JSON">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- CARDS DE KPI -->
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div class="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                    <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Sequência</span>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <h2 id="kpiBestStreak" class="text-2xl sm:text-3xl font-bold text-amber-400">0</h2>
+                        <span class="text-xs text-slate-400">dias</span>
+                    </div>
+                </div>
+                <div class="p-2.5 sm:p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                    <i data-lucide="flame" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                    <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Semana</span>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <h2 id="kpiWeeklyRate" class="text-2xl sm:text-3xl font-bold text-indigo-400">0%</h2>
+                        <span id="kpiWeeklyCount" class="text-xs text-slate-400 hidden sm:inline">(0/0)</span>
+                    </div>
+                </div>
+                <div class="p-2.5 sm:p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400">
+                    <i data-lucide="trending-up" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                    <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Hábitos Hoje</span>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <h2 id="kpiTodayHabits" class="text-2xl sm:text-3xl font-bold text-emerald-400">0/0</h2>
+                    </div>
+                </div>
+                <div class="p-2.5 sm:p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+                    <i data-lucide="check-circle-2" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                    <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Metas Hoje</span>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <h2 id="kpiTodayGoals" class="text-2xl sm:text-3xl font-bold text-sky-400">0%</h2>
+                        <span id="kpiGoalsFraction" class="text-xs text-slate-400 hidden sm:inline">(0/0)</span>
+                    </div>
+                </div>
+                <div class="p-2.5 sm:p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-400">
+                    <i data-lucide="target" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- GRID PRINCIPAL -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- MATRIZ DE HÁBITOS SEMANAL -->
+            <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+                        <div>
+                            <h3 class="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                                <i data-lucide="calendar-check" class="w-5 h-5 text-indigo-400"></i>
+                                Matriz de Hábitos (Semana Atual)
+                            </h3>
+                            <p class="text-xs text-slate-400">Funciona offline e sincroniza com o Google Sheets.</p>
+                        </div>
+
+                        <form id="addHabitForm" class="flex items-center gap-2">
+                            <input 
+                                type="text" 
+                                id="newHabitInput" 
+                                placeholder="Novo hábito..." 
+                                required
+                                class="bg-slate-950 border border-slate-700 text-sm rounded-xl px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 flex-1 sm:w-44"
+                            >
+                            <select id="newHabitCategory" class="bg-slate-950 border border-slate-700 text-xs rounded-xl px-2.5 py-2.5 text-slate-300 focus:outline-none focus:border-indigo-500">
+                                <option value="Estudos">📚 Estudos</option>
+                                <option value="Saúde">💪 Saúde</option>
+                                <option value="Trabalho">💼 Trabalho</option>
+                                <option value="Mente">🧠 Mente</option>
+                            </select>
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl transition shrink-0">
+                                <i data-lucide="plus" class="w-5 h-5"></i>
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="overflow-x-auto custom-scrollbar -mx-2 px-2">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr id="weekHeaderRow" class="border-b border-slate-800 text-xs text-slate-400 uppercase"></tr>
+                            </thead>
+                            <tbody id="habitsTableBody" class="divide-y divide-slate-800/60 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                    <span id="lastSyncText">Última sincronização: apenas local</span>
+                    <span>A coluna destacada representa <strong>Hoje</strong>.</span>
+                </div>
+            </div>
+
+            <!-- METAS DIÁRIAS -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="list-todo" class="w-5 h-5 text-sky-400"></i>
+                            Metas Diárias
+                        </h3>
+                        <span id="goalsBadge" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">0/0</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-4">Prioridades do dia sincronizadas com a nuvem.</p>
+
+                    <div class="w-full bg-slate-950 rounded-full h-2.5 mb-5 overflow-hidden border border-slate-800">
+                        <div id="goalsProgressBar" class="bg-gradient-to-r from-sky-500 to-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+
+                    <form id="addGoalForm" class="flex gap-2 mb-4">
+                        <input 
+                            type="text" 
+                            id="newGoalInput" 
+                            placeholder="Adicionar meta..." 
+                            required
+                            class="bg-slate-950 border border-slate-700 text-sm rounded-xl px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 flex-1 min-w-0"
+                        >
+                        <select id="newGoalPriority" class="bg-slate-950 border border-slate-700 text-xs rounded-xl px-2 py-2 text-slate-300 focus:outline-none focus:border-sky-500">
+                            <option value="Alta">🔴 Alta</option>
+                            <option value="Média" selected>🟡 Média</option>
+                            <option value="Baixa">🟢 Baixa</option>
+                        </select>
+                        <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-xl transition shrink-0">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                        </button>
+                    </form>
+
+                    <ul id="goalsList" class="space-y-2.5 max-h-80 overflow-y-auto custom-scrollbar pr-1"></ul>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-between items-center">
+                    <span class="text-xs text-slate-400">Entregas de hoje</span>
+                    <button onclick="clearCompletedGoals()" class="text-xs text-slate-400 hover:text-rose-400 transition">Limpar concluídas</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GRÁFICO -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+                <div>
+                    <h3 class="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-5 h-5 text-emerald-400"></i>
+                        Gráfico de Sequência e Desempenho Semanal
+                    </h3>
+                    <p class="text-xs text-slate-400">Volume de hábitos cumpridos por dia vs. Taxa de conclusão diária (%).</p>
+                </div>
+            </div>
+            <div class="relative h-64 sm:h-72 w-full">
+                <canvas id="weeklyChart"></canvas>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'habit_tracker_dashboard_v1';
+        const API_URL_KEY = 'habit_tracker_gas_url';
+        const PENDING_SYNC_KEY = 'habit_tracker_pending_sync';
+        let weeklyChartInstance = null;
+        let deferredInstallPrompt = null;
+
+        // =========================================================================
+        // 1. CONFIGURAÇÃO PWA (SERVICE WORKER, INSTALAÇÃO E ÍCONE iOS)
+        // =========================================================================
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => {
+                    console.log('Service Worker requer HTTPS ou localhost:', err);
+                });
+            });
+        }
+
+        // Captura o evento de instalação nativa no Android / Chrome Desktop
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            const btn = document.getElementById('installPwaBtn');
+            btn.classList.remove('hidden');
+            btn.classList.add('flex');
+        });
+
+        async function installPWA() {
+            if (!deferredInstallPrompt) return;
+            deferredInstallPrompt.prompt();
+            const { outcome } = await deferredInstallPrompt.userChoice;
+            if (outcome === 'accepted') {
+                document.getElementById('installPwaBtn').classList.add('hidden');
+            }
+            deferredInstallPrompt = null;
+        }
+
+        // Gera ícone PNG automaticamente via Canvas para iOS (Safari Home Screen)
+        function generateAppleTouchIcon() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 180;
+            canvas.height = 180;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, 180, 180);
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 16;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(48, 96);
+            ctx.lineTo(78, 126);
+            ctx.lineTo(136, 62);
+            ctx.stroke();
+            document.getElementById('appleTouchIcon').href = canvas.toDataURL('image/png');
+        }
+
+        // =========================================================================
+        // 2. SINCRONIZAÇÃO INTELIGENTE E FILA OFFLINE
+        // =========================================================================
+        window.addEventListener('online', () => {
+            if (localStorage.getItem(PENDING_SYNC_KEY) === 'true') {
+                pushToCloud({ source: 'PWA Mobile (Reconexão)', type: 'Sincronização', item: 'Fila Offline', status: 'Enviado' });
+            } else {
+                pullFromCloud();
+            }
+        });
+
+        window.addEventListener('offline', () => {
+            setSyncStatus('offline');
+        });
+
+        // Quando você reabre o app no celular, busca novidades da planilha automaticamente
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && navigator.onLine && apiUrl) {
+                if (localStorage.getItem(PENDING_SYNC_KEY) === 'true') {
+                    pushToCloud();
+                } else {
+                    pullFromCloud();
+                }
+            }
+        });
+
+        // =========================================================================
+        // 3. LÓGICA DO PAINEL E COMUNICAÇÃO COM GOOGLE SHEETS
+        // =========================================================================
+        function formatDateKey(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function getCurrentWeekDays() {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() + diffToMonday);
+
+            const days = [];
+            const shortNames = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                const key = formatDateKey(d);
+                days.push({
+                    name: shortNames[i],
+                    dayNumber: String(d.getDate()).padStart(2, '0'),
+                    dateKey: key,
+                    isToday: key === formatDateKey(now)
+                });
+            }
+            return days;
+        }
+
+        function getDefaultData() {
+            const todayKey = formatDateKey(new Date());
+            return {
+                habits: [
+                    { id: 1, title: 'Estudo de Dados & Python (1h)', category: 'Estudos', history: { [todayKey]: true } },
+                    { id: 2, title: 'Leitura Técnica (30 min)', category: 'Mente', history: {} },
+                    { id: 3, title: 'Exercício Físico / Caminhada', category: 'Saúde', history: {} },
+                    { id: 4, title: 'Revisão de Indicadores e Planejamento', category: 'Trabalho', history: {} }
+                ],
+                goals: [
+                    { id: 101, text: 'Revisar relatórios e análises pendentes', priority: 'Alta', completed: false }
+                ]
+            };
+        }
+
+        let state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || getDefaultData();
+        let apiUrl = localStorage.getItem(API_URL_KEY) || '';
+
+        function setSyncStatus(mode, customText) {
+            const badge = document.getElementById('syncStatusBadge');
+            const styles = {
+                'local': { bg: 'bg-slate-800 text-slate-400 border-slate-700', dot: 'bg-slate-500', text: 'Apenas Local' },
+                'syncing': { bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20', dot: 'bg-amber-400 animate-ping', text: 'Sincronizando...' },
+                'synced': { bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-400', text: 'Sheets Conectado' },
+                'offline': { bg: 'bg-amber-500/10 text-amber-300 border-amber-500/20', dot: 'bg-amber-400', text: 'Offline (Salvo no App)' },
+                'error': { bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20', dot: 'bg-rose-400', text: 'Erro de Conexão' }
+            };
+            const st = styles[mode] || styles['local'];
+            badge.className = `text-xs font-medium px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${st.bg}`;
+            badge.innerHTML = `<span class="w-2 h-2 rounded-full ${st.dot}"></span> ${customText || st.text}`;
+        }
+
+        function saveApiUrl() {
+            const inputVal = document.getElementById('apiUrlInput').value.trim();
+            localStorage.setItem(API_URL_KEY, inputVal);
+            apiUrl = inputVal;
+            if (apiUrl) {
+                pullFromCloud();
+            } else {
+                setSyncStatus('local');
+            }
+        }
+
+        async function pullFromCloud() {
+            if (!apiUrl) return;
+            if (!navigator.onLine) {
+                setSyncStatus('offline');
+                return;
+            }
+            setSyncStatus('syncing', 'Buscando...');
+            try {
+                const res = await fetch(apiUrl);
+                const result = await res.json();
+                if (result.status === 'ok') {
+                    if (result.data && result.data.habits) {
+                        state = result.data;
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                        localStorage.setItem(PENDING_SYNC_KEY, 'false');
+                        renderAll();
+                        setSyncStatus('synced');
+                        document.getElementById('lastSyncText').textContent = `Sincronizado: ${result.updatedAt || 'agora'}`;
+                    } else {
+                        await pushToCloud({ type: 'Inicialização', item: 'Carga Inicial', status: 'Criado' });
+                    }
+                }
+            } catch (err) {
+                setSyncStatus('offline');
+            }
+        }
+
+        async function pushToCloud(logEvent = null) {
+            if (!apiUrl) return;
+            if (!navigator.onLine) {
+                localStorage.setItem(PENDING_SYNC_KEY, 'true');
+                setSyncStatus('offline', 'Pendente (Sem rede)');
+                return;
+            }
+            setSyncStatus('syncing', 'Salvando...');
+            try {
+                const res = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'sync_state',
+                        state: state,
+                        logEvent: logEvent
+                    })
+                });
+                const result = await res.json();
+                if (result.status === 'ok') {
+                    localStorage.setItem(PENDING_SYNC_KEY, 'false');
+                    setSyncStatus('synced');
+                    document.getElementById('lastSyncText').textContent = `Salvo na planilha às ${result.updatedAt}`;
+                } else {
+                    setSyncStatus('error');
+                }
+            } catch (err) {
+                localStorage.setItem(PENDING_SYNC_KEY, 'true');
+                setSyncStatus('offline', 'Salvo no App (Pendente)');
+            }
+        }
+
+        function saveState(logEvent = null) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            renderAll();
+            pushToCloud(logEvent);
+        }
+
+        function calculateHabitStreak(habit) {
+            let streak = 0;
+            const today = new Date();
+            let checkDate = new Date(today);
+            if (!habit.history || !habit.history[formatDateKey(checkDate)]) {
+                checkDate.setDate(checkDate.getDate() - 1);
+            }
+            while (true) {
+                const key = formatDateKey(checkDate);
+                if (habit.history && habit.history[key]) {
+                    streak++;
+                    checkDate.setDate(checkDate.getDate() - 1);
+                } else {
+                    break;
+                }
+            }
+            return streak;
+        }
+
+        function getCategoryBadge(category) {
+            const map = {
+                'Estudos': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+                'Saúde': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                'Trabalho': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                'Mente': 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+            };
+            return `<span class="text-[10px] font-medium px-2 py-0.5 rounded-md border ${map[category] || ''}">${category}</span>`;
+        }
+
+        function renderHabitsTable() {
+            const weekDays = getCurrentWeekDays();
+            const headerRow = document.getElementById('weekHeaderRow');
+            const tbody = document.getElementById('habitsTableBody');
+
+            let headerHTML = `<th class="py-3 pr-3 font-semibold text-slate-300 min-w-[160px] sm:min-w-[200px]">Hábito</th>`;
+            weekDays.forEach(d => {
+                const highlight = d.isToday ? 'text-indigo-400 font-bold bg-indigo-500/10 rounded-t-lg' : '';
+                headerHTML += `<th class="py-2 px-1.5 sm:px-2 text-center ${highlight}"><div class="text-[10px] sm:text-[11px]">${d.name}</div><div class="text-xs opacity-75">${d.dayNumber}</div></th>`;
+            });
+            headerHTML += `<th class="py-3 pl-2 text-center">Seq.</th><th class="py-3 pl-2 text-right"></th>`;
+            headerRow.innerHTML = headerHTML;
+
+            tbody.innerHTML = state.habits.map(habit => {
+                const streak = calculateHabitStreak(habit);
+                const daysCells = weekDays.map(d => {
+                    const checked = !!(habit.history && habit.history[d.dateKey]);
+                    const colBg = d.isToday ? 'bg-indigo-500/5' : '';
+                    const btnStyle = checked 
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/30' 
+                        : 'bg-slate-950 text-transparent border-slate-700 hover:border-slate-500';
+                    return `
+                        <td class="py-3 px-1 sm:px-2 text-center ${colBg}">
+                            <button onclick="toggleHabitDay(${habit.id}, '${d.dateKey}')" class="check-anim w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center mx-auto ${btnStyle}">
+                                <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+                            </button>
+                        </td>
+                    `;
+                }).join('');
+
+                return `
+                    <tr class="hover:bg-slate-800/30 transition group">
+                        <td class="py-3 pr-3">
+                            <div class="font-medium text-slate-200 text-xs sm:text-sm leading-snug">${habit.title}</div>
+                            <div class="mt-1">${getCategoryBadge(habit.category)}</div>
+                        </td>
+                        ${daysCells}
+                        <td class="py-3 pl-2 text-center">
+                            <span class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold ${streak > 0 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-800 text-slate-500'}">🔥${streak}</span>
+                        </td>
+                        <td class="py-3 pl-1 text-right">
+                            <button onclick="deleteHabit(${habit.id})" class="text-slate-600 hover:text-rose-400 p-1 rounded transition">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderGoals() {
+            const list = document.getElementById('goalsList');
+            const total = state.goals.length;
+            const completed = state.goals.filter(g => g.completed).length;
+            const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+            document.getElementById('goalsBadge').textContent = `${completed}/${total}`;
+            document.getElementById('goalsProgressBar').style.width = `${pct}%`;
+
+            const priorityBadge = {
+                'Alta': 'text-rose-400 bg-rose-500/10 border-rose-500/20',
+                'Média': 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+                'Baixa': 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+            };
+
+            list.innerHTML = state.goals.map(goal => `
+                <li class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-950/70 border border-slate-800/90">
+                    <label class="flex items-center gap-3 cursor-pointer flex-1">
+                        <input type="checkbox" ${goal.completed ? 'checked' : ''} onchange="toggleGoal(${goal.id})" class="w-4 h-4 rounded border-slate-700 text-sky-500 bg-slate-900 cursor-pointer">
+                        <span class="text-sm ${goal.completed ? 'line-through text-slate-500' : 'text-slate-200'}">${goal.text}</span>
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-medium px-2 py-0.5 rounded border ${priorityBadge[goal.priority] || ''}">${goal.priority}</span>
+                        <button onclick="deleteGoal(${goal.id})" class="text-slate-600 hover:text-rose-400"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function renderKPIs() {
+            const weekDays = getCurrentWeekDays();
+            const todayKey = formatDateKey(new Date());
+            const totalHabits = state.habits.length;
+
+            let bestStreak = 0;
+            state.habits.forEach(h => {
+                const s = calculateHabitStreak(h);
+                if (s > bestStreak) bestStreak = s;
+            });
+            document.getElementById('kpiBestStreak').textContent = bestStreak;
+
+            let weekCompleted = 0;
+            const totalPossibleWeek = totalHabits * 7;
+            state.habits.forEach(h => {
+                weekDays.forEach(d => { if (h.history && h.history[d.dateKey]) weekCompleted++; });
+            });
+            const weekRate = totalPossibleWeek === 0 ? 0 : Math.round((weekCompleted / totalPossibleWeek) * 100);
+            document.getElementById('kpiWeeklyRate').textContent = `${weekRate}%`;
+            document.getElementById('kpiWeeklyCount').textContent = `(${weekCompleted}/${totalPossibleWeek})`;
+
+            let todayDone = 0;
+            state.habits.forEach(h => { if (h.history && h.history[todayKey]) todayDone++; });
+            document.getElementById('kpiTodayHabits').textContent = `${todayDone}/${totalHabits}`;
+
+            const totalGoals = state.goals.length;
+            const doneGoals = state.goals.filter(g => g.completed).length;
+            const goalsRate = totalGoals === 0 ? 0 : Math.round((doneGoals / totalGoals) * 100);
+            document.getElementById('kpiTodayGoals').textContent = `${goalsRate}%`;
+            document.getElementById('kpiGoalsFraction').textContent = `(${doneGoals}/${totalGoals})`;
+        }
+
+        function renderChart() {
+            const weekDays = getCurrentWeekDays();
+            const totalHabits = state.habits.length;
+            const labels = weekDays.map(d => `${d.name} (${d.dayNumber})`);
+            const completedCounts = weekDays.map(d => state.habits.reduce((acc, h) => acc + (h.history && h.history[d.dateKey] ? 1 : 0), 0));
+            const completionRates = completedCounts.map(c => totalHabits === 0 ? 0 : Math.round((c / totalHabits) * 100));
+
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            if (weeklyChartInstance) {
+                weeklyChartInstance.data.labels = labels;
+                weeklyChartInstance.data.datasets[0].data = completedCounts;
+                weeklyChartInstance.data.datasets[1].data = completionRates;
+                weeklyChartInstance.options.scales.y.max = Math.max(totalHabits, 4);
+                weeklyChartInstance.update();
+                return;
+            }
+
+            weeklyChartInstance = new Chart(ctx, {
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { type: 'bar', label: 'Hábitos Concluídos', data: completedCounts, backgroundColor: 'rgba(99, 102, 241, 0.75)', borderRadius: 8, barPercentage: 0.45, yAxisID: 'y' },
+                        { type: 'line', label: 'Taxa de Sucesso (%)', data: completionRates, borderColor: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.15)', borderWidth: 3, tension: 0.35, fill: true, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(51, 65, 85, 0.25)' }, ticks: { color: '#94a3b8' } },
+                        y: { type: 'linear', position: 'left', beginAtZero: true, max: Math.max(totalHabits, 4), ticks: { stepSize: 1, color: '#94a3b8' } },
+                        y1: { type: 'linear', position: 'right', beginAtZero: true, max: 100, grid: { drawOnChartArea: false }, ticks: { color: '#34d399', callback: v => v + '%' } }
+                    }
+                }
+            });
+        }
+
+        function toggleHabitDay(habitId, dateKey) {
+            const habit = state.habits.find(h => h.id === habitId);
+            if (!habit) return;
+            if (!habit.history) habit.history = {};
+            habit.history[dateKey] = !habit.history[dateKey];
+            saveState({
+                date: dateKey,
+                source: 'App PWA',
+                type: 'Hábito',
+                item: habit.title,
+                status: habit.history[dateKey] ? 'Concluído' : 'Desmarcado'
+            });
+        }
+
+        function deleteHabit(habitId) {
+            const habit = state.habits.find(h => h.id === habitId);
+            state.habits = state.habits.filter(h => h.id !== habitId);
+            saveState({ type: 'Hábito', item: habit ? habit.title : '', status: 'Removido' });
+        }
+
+        function toggleGoal(goalId) {
+            const goal = state.goals.find(g => g.id === goalId);
+            if (goal) {
+                goal.completed = !goal.completed;
+                saveState({ source: 'App PWA', type: 'Meta Diária', item: goal.text, status: goal.completed ? 'Concluída' : 'Pendente' });
+            }
+        }
+
+        function deleteGoal(goalId) {
+            state.goals = state.goals.filter(g => g.id !== goalId);
+            saveState();
+        }
+
+        function clearCompletedGoals() {
+            state.goals = state.goals.filter(g => !g.completed);
+            saveState();
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `habitos_backup_${formatDateKey(new Date())}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        document.getElementById('addHabitForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const input = document.getElementById('newHabitInput');
+            const category = document.getElementById('newHabitCategory').value;
+            const title = input.value.trim();
+            if (!title) return;
+            state.habits.push({ id: Date.now(), title, category, history: {} });
+            input.value = '';
+            saveState({ source: 'App PWA', type: 'Hábito', item: title, status: 'Criado' });
+        });
+
+        document.getElementById('addGoalForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const input = document.getElementById('newGoalInput');
+            const priority = document.getElementById('newGoalPriority').value;
+            const text = input.value.trim();
+            if (!text) return;
+            state.goals.push({ id: Date.now(), text, priority, completed: false });
+            input.value = '';
+            saveState({ source: 'App PWA', type: 'Meta Diária', item: text, status: 'Criada' });
+        });
+
+        function renderAll() {
+            renderHabitsTable();
+            renderGoals();
+            renderKPIs();
+            renderChart();
+            lucide.createIcons();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            generateAppleTouchIcon();
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('currentDateDisplay').textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+            
+            if (apiUrl) {
+                document.getElementById('apiUrlInput').value = apiUrl;
+                pullFromCloud();
+            }
+            renderAll();
+        });
+    </script>
+</body>
+</html>
