@@ -260,8 +260,8 @@
         // =========================================================================
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').catch(err => {
-                    console.log('Service Worker requer HTTPS ou localhost:', err);
+                navigator.serviceWorker.register('/AppHabitosRotina/sw.js').catch(err => {
+                    console.log('Erro ao registrar Service Worker:', err);
                 });
             });
         }
