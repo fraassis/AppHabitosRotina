@@ -1,9 +1,8 @@
 {
   "name": "Habit & Goal Tracker Cloud",
   "short_name": "Hábitos",
-  "description": "Painel interativo de hábitos e metas diárias integrado ao Google Sheets.",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "/AppHabitosRotina/",
+  "scope": "/AppHabitosRotina/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#020617",
